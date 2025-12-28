@@ -1,0 +1,172 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "SINGULATION.WTF V.1.0.0",
+    SubTitle = "COUNTER BLOX: GOD MODE",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 520),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.RightControl
+})
+
+local Tabs = {
+    Combat = Window:AddTab({ Title = "Combat", Icon = "crosshair" }),
+    Movement = Window:AddTab({ Title = "Movement", Icon = "move" }),
+    Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Элементы рисования
+local Cursor1 = Drawing.new("Line"); local Cursor2 = Drawing.new("Line")
+local SilentCircle = Drawing.new("Circle")
+local TracersStore = {}
+
+local function GetRGB() return Color3.fromHSV(tick() * 0.5 % 1, 1, 1) end
+
+-------------------------------------------------------------------------------
+-- UI: COMBAT
+-------------------------------------------------------------------------------
+Tabs.Combat:AddToggle("SilentAim", {Title = "OP Hitbox / Silent Aim", Default = false})
+Tabs.Combat:AddSlider("HitboxSize", {Title = "Hitbox Size", Default = 15, Min = 1, Max = 100, Rounding = 1})
+Tabs.Combat:AddSlider("HitboxTrans", {Title = "Hitbox Transparency", Default = 0.5, Min = 0, Max = 1, Rounding = 1})
+Tabs.Combat:AddSlider("SilentFov", {Title = "Silent Aim FOV", Default = 150, Min = 10, Max = 800, Rounding = 0})
+Tabs.Combat:AddToggle("Spinbot", {Title = "Hard Spinbot", Default = false})
+Tabs.Combat:AddSlider("SpinSpeed", {Title = "Spin Speed", Default = 50, Min = 1, Max = 200, Rounding = 0})
+
+-------------------------------------------------------------------------------
+-- UI: MOVEMENT
+-------------------------------------------------------------------------------
+Tabs.Movement:AddToggle("Bhop", {Title = "Bhop", Default = false})
+Tabs.Movement:AddSlider("BhopSpeed", {Title = "Bhop Speed", Default = 25, Min = 10, Max = 100, Rounding = 0})
+Tabs.Movement:AddToggle("Fly", {Title = "Fly", Default = false})
+
+-------------------------------------------------------------------------------
+-- UI: VISUALS
+-------------------------------------------------------------------------------
+Tabs.Visuals:AddToggle("Esp", {Title = "Box/Highlight ESP", Default = false})
+Tabs.Visuals:AddToggle("Tracers", {Title = "Tracers", Default = false})
+Tabs.Visuals:AddToggle("Crosshair", {Title = "RGB Pro-Crosshair", Default = true})
+Tabs.Visuals:AddToggle("ThirdPerson", {Title = "Unlock Third Person", Default = false})
+
+-------------------------------------------------------------------------------
+-- LOGIC: HITBOXES & SPINBOT (STEPPED)
+-------------------------------------------------------------------------------
+RunService.Stepped:Connect(function()
+    -- Сайлент Хитбоксы для CB
+    if Options.SilentAim.Value then
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= LP and (v.Team ~= LP.Team or v.Team == nil) then
+                local char = v.Character or (workspace:FindFirstChild(v.Name))
+                if char then
+                    -- CB использует разные названия. Проходимся по всем.
+                    local targetParts = {"Head", "Torso", "HumanoidRootPart", "HeadHB", "FakeHead"}
+                    for _, pName in pairs(targetParts) do
+                        local part = char:FindFirstChild(pName)
+                        if part and part:IsA("BasePart") then
+                            part.CanCollide = false
+                            part.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                            part.Transparency = Options.HitboxTrans.Value
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Спинбот
+    if Options.Spinbot.Value and LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        LP.Character.HumanoidRootPart.CFrame = LP.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(Options.SpinSpeed.Value), 0)
+    end
+end)
+
+-------------------------------------------------------------------------------
+-- LOGIC: ESP & CROSSHAIR (RENDERSTEPPED)
+-------------------------------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    local color = GetRGB()
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    -- Крутящийся прицел
+    local spin = tick() * 12
+    Cursor1.Visible = Options.Crosshair.Value; Cursor1.Color = color; Cursor1.Thickness = 1.5
+    Cursor1.From = center + Vector2.new(math.cos(spin)*12, math.sin(spin)*12)
+    Cursor1.To = center + Vector2.new(math.cos(spin+math.pi)*12, math.sin(spin+math.pi)*12)
+    Cursor2.Visible = Options.Crosshair.Value; Cursor2.Color = color; Cursor2.Thickness = 1.5
+    Cursor2.From = center + Vector2.new(math.cos(spin+math.pi/2)*12, math.sin(spin+math.pi/2)*12)
+    Cursor2.To = center + Vector2.new(math.cos(spin-math.pi/2)*12, math.sin(spin-math.pi/2)*12)
+
+    -- FOV
+    SilentCircle.Visible = Options.SilentAim.Value
+    SilentCircle.Position = center; SilentCircle.Radius = Options.SilentFov.Value; SilentCircle.Color = color
+
+    -- ESP & Tracers (Улучшенный поиск для CB)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LP then
+            local char = p.Character or (workspace:FindFirstChild(p.Name))
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                local enemy = (p.Team ~= LP.Team or p.Team == nil)
+                
+                -- ESP Highlight
+                local h = char:FindFirstChild("DiasHigh")
+                if Options.Esp.Value and enemy then
+                    if not h then h = Instance.new("Highlight", char); h.Name = "DiasHigh" end
+                    h.Enabled = true; h.FillColor = color; h.FillTransparency = 0.4
+                elseif h then h.Enabled = false end
+
+                -- Tracers
+                if Options.Tracers.Value and enemy and onScreen then
+                    if not TracersStore[p] then TracersStore[p] = Drawing.new("Line") end
+                    local l = TracersStore[p]
+                    l.Visible = true; l.From = Vector2.new(center.X, Camera.ViewportSize.Y); l.To = Vector2.new(pos.X, pos.Y); l.Color = color
+                elseif TracersStore[p] then TracersStore[p].Visible = false end
+            end
+        end
+    end
+end)
+
+-------------------------------------------------------------------------------
+-- LOGIC: MOVEMENT (HEARTBEAT)
+-------------------------------------------------------------------------------
+RunService.Heartbeat:Connect(function()
+    if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = LP.Character.HumanoidRootPart
+        
+        -- Fly
+        if Options.Fly.Value then
+            hrp.Velocity = Vector3.new(0, 2, 0)
+            local move = Vector3.new()
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
+            hrp.CFrame += move * 1.5
+        end
+
+        -- Bhop
+        if Options.Bhop.Value and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            if LP.Character:FindFirstChild("Humanoid") then
+                LP.Character.Humanoid.Jump = true
+                local moveDir = LP.Character.Humanoid.MoveDirection
+                hrp.Velocity = Vector3.new(moveDir.X * Options.BhopSpeed.Value, hrp.Velocity.Y, moveDir.Z * Options.BhopSpeed.Value)
+            end
+        end
+    end
+    
+    if Options.ThirdPerson.Value then
+        LP.CameraMaxZoomDistance = 40; LP.CameraMode = Enum.CameraMode.Classic
+    end
+end)
+
+SaveManager:SetLibrary(Fluent); InterfaceManager:SetLibrary(Fluent)
+InterfaceManager:BuildInterfaceSection(Tabs.Settings); SaveManager:BuildConfigSection(Tabs.Settings)
+Window:SelectTab(1)
