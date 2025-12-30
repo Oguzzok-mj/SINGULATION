@@ -1,45 +1,9 @@
-Dendi
-r0ckysc
-Roblox
-
-Это начало приватного канала #🌫️-program. 
-#CEO ! Blatant — 25.12.2025 22:59
--- [[ DIAS CHEAT V17: RAGE CURSOR & FULL TRACERS ]] --
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local LP = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-Раскрыть
-message.txt
-8 кб
-https://youtu.be/mAaPi5Sgd6Q
-@everyone
-YouTube
-ШЕФ
-Singulation.wtf By BLATAND v1 ХУЕТА ПОКА
-Изображение
-Dendi
-
- — 28.12.2025 22:12
-loadstring(game:HttpGet("https://gist.githubusercontent.com/Oguzzok-mj/c60cb320387bcf4d02124d7754e86b48/raw/ebb9ee5eedf048cdbdf4df03af4b709f96a865a7/gistfile1.txt"))()
-#CEO ! Blatant — 12:46
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "SINGULATION.WTF V.1.0.0",
-Раскрыть
-message.txt
-12 кб
-﻿
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
-
-local Window = Fluent:CreateWindow({
-    Title = "SINGULATION.WTF V.1.0.0",
+    Title = "SINGULATION.WTF V.1.0.1",
     SubTitle = "CB:RO FULL & FIXED",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 520),
