@@ -3,10 +3,10 @@ local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/d
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
 local Window = Fluent:CreateWindow({
-    Title = "SINGULATION.WTF V.1.0.1",
+    Title = "SINGULATION.WTF V.1.0.0",
     SubTitle = "CB:RO FULL & FIXED",
     TabWidth = 160,
-    Size = UDim2.fromOffset(580, 520),
+    Size = UDim2.fromOffset(580, 620),
     Acrylic = false,
     Theme = "Dark",
     MinimizeKey = Enum.KeyCode.RightControl
@@ -23,182 +23,259 @@ local Options = Fluent.Options
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Кэш для рисования
-local Cursor1 = Drawing.new("Line"); local Cursor2 = Drawing.new("Line")
+-- Drawing элементы
+local Cursor1 = Drawing.new("Line"); Cursor1.Thickness = 1
+local Cursor2 = Drawing.new("Line"); Cursor2.Thickness = 1
 local SilentCircle = Drawing.new("Circle")
+SilentCircle.Thickness = 1
+SilentCircle.NumSides = 64
+SilentCircle.Filled = false
+SilentCircle.Transparency = 1
+
 local TracersStore = {}
-local EspStore = {} -- Для Имен, Дистанции и Хилбаров
+local EspStore = {}
+local LastHealth = {}
 
 local function GetRGB() return Color3.fromHSV(tick() * 0.5 % 1, 1, 1) end
 
 -------------------------------------------------------------------------------
--- UI: COMBAT
+-- ФУНКЦИИ (ЗВУК И НЕБО)
 -------------------------------------------------------------------------------
-Tabs.Combat:AddToggle("SilentAim", {Title = "OP Head Hitbox", Default = false})
-Tabs.Combat:AddSlider("HitboxSize", {Title = "Head Size", Default = 15, Min = 1, Max = 100, Rounding = 1})
-Tabs.Combat:AddSlider("HitboxTrans", {Title = "Head Transparency", Default = 0.5, Min = 0, Max = 1, Rounding = 0.1})
-Tabs.Combat:AddSlider("SilentFov", {Title = "Silent Aim FOV", Default = 150, Min = 10, Max = 800, Rounding = 0})
-Tabs.Combat:AddToggle("NoSpread", {Title = "No Spread (В точку)", Default = true})
-Tabs.Combat:AddToggle("NoRecoil", {Title = "No Recoil (Без отдачи)", Default = true})
-Tabs.Combat:AddToggle("Spinbot", {Title = "Hard Spinbot", Default = false})
-Tabs.Combat:AddSlider("SpinSpeed", {Title = "Spin Speed", Default = 50, Min = 1, Max = 200, Rounding = 0})
+local function PlayHitSound()
+    local sound = Instance.new("Sound", game:GetService("SoundService"))
+    sound.SoundId = "rbxassetid://1255557831"
+    sound.Volume = 5
+    sound:Play()
+    game:GetService("Debris"):AddItem(sound, 1)
+end
+
+local function SetSkybox(state)
+    if state then
+        local sky = Lighting:FindFirstChild("CustomSky") or Instance.new("Sky", Lighting)
+        sky.Name = "CustomSky"
+        sky.SkyboxBk = "rbxassetid://271042516"
+        sky.SkyboxDn = "rbxassetid://271077243"
+        sky.SkyboxFt = "rbxassetid://271042310"
+        sky.SkyboxLf = "rbxassetid://271042988"
+        sky.SkyboxRt = "rbxassetid://271042730"
+        sky.SkyboxUp = "rbxassetid://271077958"
+        Lighting.ClockTime = 0
+    else
+        if Lighting:FindFirstChild("CustomSky") then Lighting.CustomSky:Destroy() end
+        Lighting.ClockTime = 14
+    end
+end
 
 -------------------------------------------------------------------------------
--- UI: MOVEMENT
+-- ЛОГИКА SILENT AIM (ИЗ TXT)
+-------------------------------------------------------------------------------
+local function StartQuotasSilentAim()
+    task.spawn(function()
+        while true do
+            task.wait(0.3)
+            if Options.SilentAim and Options.SilentAim.Value then
+                pcall(function()
+                    for _, v in pairs(Players:GetPlayers()) do
+                        if v ~= LP and v.Character and (v.Team ~= LP.Team or v.Team == nil) then
+                            local root = v.Character:FindFirstChild("HumanoidRootPart")
+                            local hum = v.Character:FindFirstChild("Humanoid")
+                            if root and hum and hum.Health > 0 then
+                                local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
+                                local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                                
+                                if dist <= Options.SilentFov.Value then
+                                    local parts = {"RightUpperLeg", "LeftUpperLeg", "HeadHB", "HumanoidRootPart", "Head"}
+                                    for _, pName in pairs(parts) do
+                                        local part = v.Character:FindFirstChild(pName)
+                                        if part then
+                                            part.CanCollide = false
+                                            part.Transparency = 10
+                                            part.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+-------------------------------------------------------------------------------
+-- UI ЭЛЕМЕНТЫ (COMBAT)
+-------------------------------------------------------------------------------
+Tabs.Combat:AddToggle("SilentAim", {Title = "OP Head Hitbox (Silent Aim)", Default = false})
+Tabs.Combat:AddSlider("HitboxSize", {Title = "Head Size", Default = 15, Min = 1, Max = 100, Rounding = 1})
+Tabs.Combat:AddSlider("SilentFov", {Title = "Silent Aim FOV", Default = 150, Min = 10, Max = 800, Rounding = 0})
+Tabs.Combat:AddToggle("HitSound", {Title = "Hit Sound (Bell)", Default = false})
+Tabs.Combat:AddToggle("NoSpread", {Title = "No Spread", Default = true})
+Tabs.Combat:AddToggle("NoRecoil", {Title = "No Recoil", Default = true})
+Tabs.Combat:AddToggle("Spinbot", {Title = "Hard Spinbot", Default = false})
+Tabs.Combat:AddSlider("SpinSpeed", {Title = "Spin Speed", Default = 50, Min = 1, Max = 300, Rounding = 0})
+
+-------------------------------------------------------------------------------
+-- UI ЭЛЕМЕНТЫ (MOVEMENT)
 -------------------------------------------------------------------------------
 Tabs.Movement:AddToggle("Bhop", {Title = "Bhop", Default = false})
 Tabs.Movement:AddSlider("BhopSpeed", {Title = "Bhop Speed", Default = 25, Min = 10, Max = 100, Rounding = 0})
-Tabs.Movement:AddToggle("Fly", {Title = "Fly", Default = false})
+Tabs.Movement:AddToggle("Fly", {Title = "Fly Mode", Default = false})
+Tabs.Movement:AddSlider("FlySpeed", {Title = "Fly Speed", Default = 50, Min = 10, Max = 300, Rounding = 0})
 
 -------------------------------------------------------------------------------
--- UI: VISUALS
+-- UI ЭЛЕМЕНТЫ (VISUALS)
 -------------------------------------------------------------------------------
 Tabs.Visuals:AddToggle("Esp", {Title = "Highlight ESP", Default = false})
 Tabs.Visuals:AddToggle("EspNames", {Title = "Show Names", Default = false})
-Tabs.Visuals:AddToggle("EspDist", {Title = "Show Distance", Default = false})
 Tabs.Visuals:AddToggle("EspHealth", {Title = "Show Health Bar", Default = false})
 Tabs.Visuals:AddToggle("Tracers", {Title = "Tracers", Default = false})
 Tabs.Visuals:AddToggle("Crosshair", {Title = "RGB Pro-Crosshair", Default = true})
+Tabs.Visuals:AddToggle("NightMode", {Title = "Night Skybox", Default = false}):OnChanged(function(v) SetSkybox(v) end)
 Tabs.Visuals:AddToggle("ThirdPerson", {Title = "Unlock Third Person", Default = false})
 
 -------------------------------------------------------------------------------
--- LOGIC: WEAPON MODS (БЕЗ ФРИЗОВ)
+-- ЛОГИКА WEAPON MODS
 -------------------------------------------------------------------------------
 task.spawn(function()
-    while task.wait(5) do -- Увеличил задержку до 5 сек для исключения лагов
+    while task.wait(5) do
         if Options.NoSpread.Value or Options.NoRecoil.Value then
-            for _, v in pairs(getgc(true)) do
-                if type(v) == "table" and (rawget(v, "Spread") or rawget(v, "Accuracy")) then
-                    if Options.NoSpread.Value then
-                        v.Spread = 0; v.Accuracy = 0; v.WepSpread = 0; v.MaxSpread = 0
-                        if v.ConeControl then v.ConeControl = 0 end
-                    end
-                    if Options.NoRecoil.Value then
-                        v.Recoil = 0; v.RecoilX = 0; v.RecoilY = 0
+            pcall(function()
+                for _, v in pairs(getgc(true)) do
+                    if type(v) == "table" and (rawget(v, "Spread") or rawget(v, "Accuracy")) then
+                        if Options.NoSpread.Value then
+                            v.Spread = 0; v.Accuracy = 0; v.WepSpread = 0; v.MaxSpread = 0
+                            if v.ConeControl then v.ConeControl = 0 end
+                        end
+                        if Options.NoRecoil.Value then
+                            v.Recoil = 0; v.RecoilX = 0; v.RecoilY = 0
+                        end
                     end
                 end
-            end
+            end)
         end
     end
 end)
 
 -------------------------------------------------------------------------------
--- LOGIC: ESP HELPER
+-- ESP HELPER
 -------------------------------------------------------------------------------
 local function CreateEsp(p)
     local data = {
         Name = Drawing.new("Text"),
-        Dist = Drawing.new("Text"),
         HealthOutline = Drawing.new("Line"),
         HealthBar = Drawing.new("Line")
     }
-    data.Name.Size = 14; data.Name.Center = true; data.Name.Outline = true
-    data.Dist.Size = 13; data.Dist.Center = true; data.Dist.Outline = true
+    data.Name.Size = 14; data.Name.Center = true; data.Name.Outline = true; data.Name.Visible = false
     EspStore[p] = data
 end
 
 -------------------------------------------------------------------------------
--- MAIN RENDER LOOP
+-- ГЛАВНЫЙ ЦИКЛ РЕНДЕРА (VISUALS + HIT SOUND)
 -------------------------------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     local color = GetRGB()
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 
-    -- Crosshair & FOV
-    local spin = tick() * 12
-    Cursor1.Visible = Options.Crosshair.Value; Cursor1.Color = color
-    Cursor1.From = center + Vector2.new(math.cos(spin)*12, math.sin(spin)*12); Cursor1.To = center + Vector2.new(math.cos(spin+math.pi)*12, math.sin(spin+math.pi)*12)
-    Cursor2.Visible = Options.Crosshair.Value; Cursor2.Color = color
-    Cursor2.From = center + Vector2.new(math.cos(spin+math.pi/2)*12, math.sin(spin+math.pi/2)*12); Cursor2.To = center + Vector2.new(math.cos(spin-math.pi/2)*12, math.sin(spin-math.pi/2)*12)
+    -- Crosshair
+    if Options.Crosshair.Value then
+        local spin = tick() * 12
+        Cursor1.Visible = true; Cursor1.Color = color
+        Cursor1.From = center + Vector2.new(math.cos(spin)*12, math.sin(spin)*12); Cursor1.To = center + Vector2.new(math.cos(spin+math.pi)*12, math.sin(spin+math.pi)*12)
+        Cursor2.Visible = true; Cursor2.Color = color
+        Cursor2.From = center + Vector2.new(math.cos(spin+math.pi/2)*12, math.sin(spin+math.pi/2)*12); Cursor2.To = center + Vector2.new(math.cos(spin-math.pi/2)*12, math.sin(spin-math.pi/2)*12)
+    else
+        Cursor1.Visible = false; Cursor2.Visible = false
+    end
+    
     SilentCircle.Visible = Options.SilentAim.Value; SilentCircle.Position = center; SilentCircle.Radius = Options.SilentFov.Value; SilentCircle.Color = color
 
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LP then
+            if not EspStore[p] then CreateEsp(p) end
+            local e = EspStore[p]
             local char = p.Character
-            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
-                local hrp = char.HumanoidRootPart
-                local hum = char.Humanoid
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+            if char and hum and hrp and hum.Health > 0 then
+                -- Звук попадания
+                if Options.HitSound.Value and (p.Team ~= LP.Team or p.Team == nil) then
+                    if LastHealth[p] and hum.Health < LastHealth[p] then PlayHitSound() end
+                    LastHealth[p] = hum.Health
+                end
+
                 local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
                 local enemy = (p.Team ~= LP.Team or p.Team == nil)
-                
-                -- Hitboxes (In Render Loop to prevent reset)
-                if Options.SilentAim.Value and enemy then
-                    for _, part in pairs(char:GetChildren()) do
-                        if part:IsA("BasePart") and (part.Name == "Head" or part.Name == "FakeHead" or part.Name == "HeadHB") then
-                            part.CanCollide = false
-                            part.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
-                            part.Transparency = Options.HitboxTrans.Value
-                        end
-                    end
-                end
 
-                -- ESP Logic
-                if not EspStore[p] then CreateEsp(p) end
-                local e = EspStore[p]
-                local isVisible = onScreen and enemy
+                -- Никнеймы
+                if onScreen and enemy and Options.EspNames.Value then
+                    e.Name.Visible = true; e.Name.Text = p.Name; e.Name.Position = Vector2.new(pos.X, pos.Y - 40); e.Name.Color = color
+                else e.Name.Visible = false end
 
-                e.Name.Visible = isVisible and Options.EspNames.Value
-                e.Dist.Visible = isVisible and Options.EspDist.Value
-                e.HealthBar.Visible = isVisible and Options.EspHealth.Value
-                e.HealthOutline.Visible = isVisible and Options.EspHealth.Value
+                -- Хилбары
+                if onScreen and enemy and Options.EspHealth.Value then
+                    local hp = math.clamp(hum.Health/hum.MaxHealth, 0, 1)
+                    e.HealthOutline.Visible = true; e.HealthBar.Visible = true
+                    e.HealthOutline.From = Vector2.new(pos.X-20, pos.Y-20); e.HealthOutline.To = Vector2.new(pos.X-20, pos.Y+20); e.HealthOutline.Color = Color3.new(0,0,0); e.HealthOutline.Thickness = 3
+                    e.HealthBar.From = Vector2.new(pos.X-20, pos.Y+20); e.HealthBar.To = Vector2.new(pos.X-20, pos.Y+20-(40*hp)); e.HealthBar.Color = Color3.fromHSV(hp*0.3, 1, 1); e.HealthBar.Thickness = 2
+                else e.HealthOutline.Visible = false; e.HealthBar.Visible = false end
 
-                if isVisible then
-                    local d = math.floor((LP.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
-                    e.Name.Text = p.Name; e.Name.Position = Vector2.new(pos.X, pos.Y - 45); e.Name.Color = color
-                    e.Dist.Text = "[" .. d .. "m]"; e.Dist.Position = Vector2.new(pos.X, pos.Y - 30); e.Dist.Color = Color3.new(1,1,1)
-                    
-                    if Options.EspHealth.Value then
-                        local hp = hum.Health / hum.MaxHealth
-                        local barSize = 40
-                        e.HealthOutline.From = Vector2.new(pos.X - 25, pos.Y - barSize/2)
-                        e.HealthOutline.To = Vector2.new(pos.X - 25, pos.Y + barSize/2)
-                        e.HealthOutline.Thickness = 3; e.HealthOutline.Color = Color3.new(0,0,0)
-                        
-                        e.HealthBar.From = Vector2.new(pos.X - 25, pos.Y + barSize/2)
-                        e.HealthBar.To = Vector2.new(pos.X - 25, pos.Y + barSize/2 - (barSize * hp))
-                        e.HealthBar.Thickness = 2; e.HealthBar.Color = Color3.fromHSV(hp * 0.3, 1, 1)
-                    end
-                end
-
-                -- Highlight & Tracers
+                -- Highlight
                 local h = char:FindFirstChild("Highlight")
-                if Options.Esp.Value and enemy then
+                if enemy and Options.Esp.Value then
                     if not h then h = Instance.new("Highlight", char) end
                     h.Enabled = true; h.FillColor = color
                 elseif h then h.Enabled = false end
 
-                if Options.Tracers.Value and enemy and onScreen then
+                -- Tracers
+                if enemy and onScreen and Options.Tracers.Value then
                     if not TracersStore[p] then TracersStore[p] = Drawing.new("Line") end
                     TracersStore[p].Visible = true; TracersStore[p].From = Vector2.new(center.X, Camera.ViewportSize.Y); TracersStore[p].To = Vector2.new(pos.X, pos.Y); TracersStore[p].Color = color
                 elseif TracersStore[p] then TracersStore[p].Visible = false end
+            else
+                -- Скрываем если мертв
+                e.Name.Visible = false; e.HealthBar.Visible = false; e.HealthOutline.Visible = false
+                if TracersStore[p] then TracersStore[p].Visible = false end
+                if char and char:FindFirstChild("Highlight") then char.Highlight.Enabled = false end
             end
         end
     end
 end)
 
 -------------------------------------------------------------------------------
--- MOVEMENT
+-- ЛОГИКА MOVEMENT
 -------------------------------------------------------------------------------
 RunService.Heartbeat:Connect(function()
     if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = LP.Character.HumanoidRootPart
         local hum = LP.Character:FindFirstChild("Humanoid")
+        
+        -- Fly
         if Options.Fly.Value then
-            hrp.Velocity = Vector3.new(0, 2, 0)
+            hrp.Velocity = Vector3.new(0, 0.1, 0)
             local move = Vector3.new()
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
-            hrp.CFrame += move * 1.5
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
+            hrp.CFrame += move * (Options.FlySpeed.Value / 50)
         end
+        
+        -- Bhop
         if Options.Bhop.Value and UserInputService:IsKeyDown(Enum.KeyCode.Space) and hum then
             hum.Jump = true
             if hum.MoveDirection.Magnitude > 0 then
                 hrp.Velocity = Vector3.new(hum.MoveDirection.X * Options.BhopSpeed.Value, hrp.Velocity.Y, hum.MoveDirection.Z * Options.BhopSpeed.Value)
             end
         end
+        
+        -- Spinbot
         if Options.Spinbot.Value then
             hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(Options.SpinSpeed.Value), 0)
         end
@@ -206,6 +283,7 @@ RunService.Heartbeat:Connect(function()
     LP.CameraMaxZoomDistance = Options.ThirdPerson.Value and 40 or 0.5
 end)
 
+StartQuotasSilentAim()
 SaveManager:SetLibrary(Fluent); InterfaceManager:SetLibrary(Fluent)
 InterfaceManager:BuildInterfaceSection(Tabs.Settings); SaveManager:BuildConfigSection(Tabs.Settings)
 Window:SelectTab(1)
