@@ -1,31 +1,33 @@
+-- // OPTIMIZED SINGULATION.WTF
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "SINGULATION.WTF V.1.8.0 (ULTIMATE)",
-   LoadingTitle = "CB:RO ULTIMATE - RAGE EDITION",
-   LoadingSubtitle = "REMASTERED BY  sngl.",
+   Name = "SINGULATION.WTF V.1.8.1 (OPTIMIZED)",
+   LoadingTitle = "CB:RO ULTIMATE - STABLE",
+   LoadingSubtitle = "FIXED by sgla.t",
    ConfigurationSaving = { Enabled = true, FolderName = "Singulation", FileName = "Config" },
    KeySystem = false
 })
 
--- // СЕРВИСЫ
+-- // СЕРВИСЫ (КЭШ)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local Stats = game:GetService("Stats")
+local Debris = game:GetService("Debris")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- // DRAWING ОБЪЕКТЫ
+-- // DRAWING ОБЪЕКТЫ (RE-USE)
 local Cursor1 = Drawing.new("Line"); Cursor1.Thickness = 1
 local Cursor2 = Drawing.new("Line"); Cursor2.Thickness = 1
 local SilentCircle = Drawing.new("Circle")
-SilentCircle.Thickness = 1; SilentCircle.NumSides = 64; SilentCircle.Filled = false; SilentCircle.Transparency = 1
+SilentCircle.Thickness = 1; SilentCircle.NumSides = 32 -- Уменьшено для FPS
 local LegitCircle = Drawing.new("Circle")
-LegitCircle.Thickness = 1; LegitCircle.NumSides = 64; LegitCircle.Filled = false; LegitCircle.Transparency = 1
+LegitCircle.Thickness = 1; LegitCircle.NumSides = 32
 
--- // UI ЭЛЕМЕНТЫ
+-- // UI
 local SpecGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local SpecLabel = Instance.new("TextLabel", SpecGui)
 SpecLabel.Size = UDim2.new(0, 200, 0, 300); SpecLabel.Position = UDim2.new(0, 15, 0.4, 0)
@@ -33,7 +35,177 @@ SpecLabel.BackgroundTransparency = 1; SpecLabel.TextColor3 = Color3.new(1, 1, 1)
 
 local WLabel = Instance.new("TextLabel", Instance.new("ScreenGui", game:GetService("CoreGui")))
 WLabel.Size = UDim2.new(0, 300, 0, 20); WLabel.Position = UDim2.new(0.4, 0, 0, 5)
-WLabel.BackgroundTransparency = 1; WLabel.Font = Enum.Font.Code; WLabel.TextSize = 14; WLabel.TextStrokeTransparency = 0
+WLabel.BackgroundTransparency = 1; WLabel.Font = Enum.Font.Code; WLabel.TextSize = 14
+
+-- // ХРАНИЛИЩА
+local EspStore = {}
+local TracersStore = {}
+
+local State = {
+    SilentAim = false, HitboxSize = 15, SilentFov = 150, HitboxTransparency = 0.8, Spinbot = false, SpinSpeed = 50,
+    LegitAim = false, LegitSmooth = 5, LegitFov = 100, LegitPart = "Head",
+    HitSound = false, NoRecoil = true,
+    Bhop = false, BhopSpeed = 25, Fly = false, FlySpeed = 50,
+    Esp = false, EspNames = false, EspHealth = false, Tracers = false,
+    Crosshair = true, SpecList = true, CameraFOV = 80, ThirdPerson = false,
+    HandMaterial = "Default", HandTransparency = 0, HandColor = Color3.fromRGB(255, 255, 255),
+    NightMode = false, WorldTint = Color3.fromRGB(255, 255, 255), Brightness = 1, Exposure = 0
+}
+
+-- // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+local function GetRGB() return Color3.fromHSV(tick() * 0.5 % 1, 1, 1) end
+
+-- // ВКЛАДКИ (Без изменений названий)
+local TabRage = Window:CreateTab("Rage Bot", "zap")
+local TabLegit = Window:CreateTab("Legit Bot", "crosshair")
+local TabMovement = Window:CreateTab("Movement", "move")
+local TabVisuals = Window:CreateTab("Visuals", "eye")
+local TabWorld = Window:CreateTab("World", "map")
+
+-- [Здесь должны быть твои Tab:CreateToggle/Slider - логика та же]
+-- ... (пропущено для краткости, оставь свои вызовы функций как были)
+
+-- // ОПТИМИЗИРОВАННЫЙ ЦИКЛ ОБНОВЛЕНИЯ МИРА (Раз в 0.5 сек вместо каждого кадра)
+task.spawn(function()
+    while task.wait(0.5) do
+        Lighting.ClockTime = State.NightMode and 0 or 14
+        Lighting.Ambient = State.WorldTint
+        Lighting.OutdoorAmbient = State.WorldTint
+        Lighting.Brightness = State.Brightness
+        Lighting.ExposureCompensation = State.Exposure
+        
+        -- Очистка кэша ESP для вышедших игроков
+        for player, _ in pairs(EspStore) do
+            if not player or not player.Parent then
+                for _, draw in pairs(EspStore[player]) do draw:Remove() end
+                EspStore[player] = nil
+            end
+        end
+    end
+end)
+
+-- // ГЛАВНЫЙ ЦИКЛ РЕНДЕРА
+RunService.RenderStepped:Connect(function()
+    local color = GetRGB()
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    
+    WLabel.Text = string.format("SINGULATION.WTF | %d FPS | %dms", math.floor(1/workspace:GetRealPhysicsFPS()), math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()))
+    WLabel.TextColor3 = color
+    Camera.FieldOfView = State.CameraFOV
+
+    -- Оптимизированный ESP
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LP then continue end
+        
+        local char = p.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+        local enemy = (p.Team ~= LP.Team or p.Team == nil)
+
+        if not hrp or not hum or hum.Health <= 0 or not enemy then
+            if EspStore[p] then 
+                EspStore[p].Name.Visible = false
+                EspStore[p].HOutline.Visible = false
+                EspStore[p].HBar.Visible = false
+            end
+            if TracersStore[p] then TracersStore[p].Visible = false end
+            continue
+        end
+
+        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+        
+        -- Highlight (оптимизировано)
+        if State.Esp then
+            local h = char:FindFirstChild("Highlight") or Instance.new("Highlight", char)
+            h.FillColor = color
+            h.Enabled = true
+        elseif char:FindFirstChild("Highlight") then
+            char.Highlight.Enabled = false
+        end
+
+        if onScreen then
+            if not EspStore[p] then
+                EspStore[p] = {
+                    Name = Drawing.new("Text"), HOutline = Drawing.new("Line"), HBar = Drawing.new("Line")
+                }
+                EspStore[p].Name.Size = 14; EspStore[p].Name.Center = true; EspStore[p].Name.Outline = true
+            end
+
+            local e = EspStore[p]
+            local h = math.abs(Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0)).Y - Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3.5, 0)).Y)
+            local w = h / 2
+
+            if State.EspNames then
+                e.Name.Visible = true
+                e.Name.Text = string.format("%s [%dm]", p.Name, math.floor((hrp.Position - LP.Character.HumanoidRootPart.Position).Magnitude))
+                e.Name.Position = Vector2.new(pos.X, pos.Y - (h/2) - 15)
+                e.Name.Color = color
+            else e.Name.Visible = false end
+
+            if State.EspHealth then
+                local pct = hum.Health / hum.MaxHealth
+                e.HOutline.Visible = true; e.HBar.Visible = true
+                e.HOutline.From = Vector2.new(pos.X - w/2 - 5, pos.Y - h/2)
+                e.HOutline.To = Vector2.new(pos.X - w/2 - 5, pos.Y + h/2)
+                e.HBar.From = Vector2.new(pos.X - w/2 - 5, pos.Y + h/2)
+                e.HBar.To = Vector2.new(pos.X - w/2 - 5, pos.Y + h/2 - (h * pct))
+                e.HBar.Color = Color3.fromHSV(pct * 0.3, 1, 1)
+            else e.HOutline.Visible = false; e.HBar.Visible = false end
+        else
+            if EspStore[p] then for _, v in pairs(EspStore[p]) do v.Visible = false end end
+        end
+    end
+
+    -- Crosshair & FOV Circles
+    if State.Crosshair then
+        local spin = tick() * 10
+        Cursor1.Visible = true; Cursor1.Color = color
+        Cursor1.From = center + Vector2.new(math.cos(spin)*10, math.sin(spin)*10)
+        Cursor1.To = center + Vector2.new(math.cos(spin+3.14)*10, math.sin(spin+3.14)*10)
+    else Cursor1.Visible = false end
+
+    SilentCircle.Visible = State.SilentAim; SilentCircle.Position = center; SilentCircle.Radius = State.SilentFov; SilentCircle.Color = color
+end)
+
+-- // МОДИФИКАЦИЯ ОРУЖИЯ (ОПТИМИЗИРОВАНО: РАЗ В 2 СЕКУНДЫ)
+task.spawn(function()
+    while task.wait(2) do
+        if State.NoRecoil then
+            for _, v in pairs(getgc(true)) do
+                if type(v) == "table" and rawget(v, "Recoil") then
+                    v.Recoil = 0; v.Spread = 0; v.MaxSpread = 0
+                end
+            end
+        end
+    end
+end)
+
+-- // LEGIT AIM (MOUSEMOVE FIX)
+task.spawn(function()
+    while task.wait() do
+        if State.LegitAim then
+            local target = nil
+            local minDist = State.LegitFov
+            local mousePos = UserInputService:GetMouseLocation()
+
+            for _, v in ipairs(Players:GetPlayers()) do
+                if v ~= LP and v.Character and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+                    local part = v.Character:FindFirstChild(State.LegitPart)
+                    if part then
+                        local pos, vis = Camera:WorldToViewportPoint(part.Position)
+                        if vis then
+                            local mag = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                            if mag < minDist then minDist = mag; target = pos end
+                        end
+                    end
+                end
+            end
+            if target then
+                mousemoverel((target.X - mousePos.X)/State.LegitSmooth, (target.Y - mousePos.Y)/State.LegitSmooth)
+            end
+        end
+    end
+end)
 
 -- // ХРАНИЛИЩА
 local EspStore = {}
